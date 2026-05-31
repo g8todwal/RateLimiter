@@ -5,6 +5,8 @@ import com.todwal.rateify.Constants.Tiers;
 import com.todwal.rateify.DTO.RateLimiterDTO;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -12,10 +14,12 @@ public class PolicyRegistry {
     private final Map<Tiers, RateLimiterPolicy> policies;
     private final Map<Algorithm, RateLimiter> rateLimiters;
 
-    public PolicyRegistry(RateLimiter rateLimiter) {
-        this.rateLimiters = Map.of(
-                Algorithm.TOKEN_BUCKET, rateLimiter
-        );
+    public PolicyRegistry(List<RateLimiter> rateLimiterList) {
+        Map<Algorithm, RateLimiter> map = new HashMap<>();
+        for (RateLimiter rl : rateLimiterList) {
+            map.put(rl.getAlgorithm(), rl);
+        }
+        this.rateLimiters = Map.copyOf(map);
 
         this.policies = Map.of(
                 Tiers.FREE_TIER, RateLimiterPolicy.builder()

@@ -1,5 +1,6 @@
 package com.todwal.rateify.TokenBucket;
 
+import com.todwal.rateify.Constants.Algorithm;
 import com.todwal.rateify.DTO.RateLimiterDTO;
 import com.todwal.rateify.RateLimiter;
 import com.todwal.rateify.RateLimiterPolicy;
@@ -9,6 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TokenBucket implements RateLimiter {
+
+    @Override
+    public Algorithm getAlgorithm() { return Algorithm.TOKEN_BUCKET; }
 
     private final ConcurrentHashMap<String, TokenBucketParams> buckets = new ConcurrentHashMap<>();
 

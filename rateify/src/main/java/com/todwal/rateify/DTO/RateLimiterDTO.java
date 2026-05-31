@@ -1,11 +1,11 @@
 package com.todwal.rateify.DTO;
 
 public class RateLimiterDTO {
-    public boolean allowed;
-    public long remainingToken;
-    public long retryAfterMs;
-    public long resetAtEpochMs;
-    public String reason;
+    private boolean allowed;
+    private long remainingToken;
+    private long retryAfterMs;
+    private long resetAtEpochMs;
+    private String reason;
 
     private RateLimiterDTO(Builder builder){
         this.allowed = builder.allowed;
@@ -16,7 +16,7 @@ public class RateLimiterDTO {
     }
     public static Builder builder() { return new Builder(); }
 
-    public static class Builder{
+    public static class Builder {
         private boolean allowed;
         private long remainingToken;
         private long retryAfterMs;
