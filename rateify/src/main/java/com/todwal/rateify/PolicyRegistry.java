@@ -28,14 +28,14 @@ public class PolicyRegistry {
                         .refillRate(1.0)
                         .build(),
                 Tiers.PREMIUM_TIER, RateLimiterPolicy.builder()
-                        .algorithm(Algorithm.TOKEN_BUCKET)
-                        .bucketCapacity(100)
-                        .refillRate(10.0)
+                        .algorithm(Algorithm.SLIDING_WINDOW_LOG)
+                        .windowSizeMs(60_000)
+                        .limit(100)
                         .build(),
                 Tiers.LOGIN_TIER, RateLimiterPolicy.builder()
-                        .algorithm(Algorithm.TOKEN_BUCKET)
-                        .bucketCapacity(5)
-                        .refillRate(0.1)
+                        .algorithm(Algorithm.SLIDING_WINDOW_COUNTER)
+                        .windowSizeMs(60_000)
+                        .limit(5)
                         .build()
         );
     }

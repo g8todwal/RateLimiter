@@ -5,16 +5,16 @@ import java.util.Deque;
 
 public class SlidingWindowLogParams {
     private final long limit;
-    private final long windowSizeMs;
+    private final long windowSizeNs;
     private final Deque<Long> timestamps;
 
-    public SlidingWindowLogParams(long limit, long windowSizeMs) {
+    public SlidingWindowLogParams(long limit, long windowSizeNs) {
         this.limit = limit;
-        this.windowSizeMs = windowSizeMs;
+        this.windowSizeNs = windowSizeNs;
         this.timestamps = new ArrayDeque<>();
     }
 
     public long getLimit() { return limit; }
-    public long getWindowSizeMs() { return windowSizeMs; }
+    public long getWindowSizeNs() { return windowSizeNs; }
     public Deque<Long> getTimestamps() { return timestamps; }
 }

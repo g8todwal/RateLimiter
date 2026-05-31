@@ -7,45 +7,44 @@ import com.todwal.rateify.RateLimiterPolicy;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class TokenBucket implements RateLimiter {
 
+    private final ConcurrentHashMap<String, AtomicReference<TokenBucketState>> buckets = new ConcurrentHashMap<>();
+
     @Override
     public Algorithm getAlgorithm() { return Algorithm.TOKEN_BUCKET; }
 
-    private final ConcurrentHashMap<String, TokenBucketParams> buckets = new ConcurrentHashMap<>();
-
     @Override
     public RateLimiterDTO tryAcquire(String key, RateLimiterPolicy policy) {
-        TokenBucketParams params = buckets.computeIfAbsent(key,
-                k -> new TokenBucketParams(policy.getBucketCapacity(), policy.getRefillRate()));
+        AtomicReference<TokenBucketState> ref = buckets.computeIfAbsent(key,
+                k -> new AtomicReference<>(new TokenBucketState(policy.getBucketCapacity(), System.nanoTime())));
 
-        synchronized (params) {
-            double currentTime = System.currentTimeMillis();
-            double elapsedTime = (currentTime - params.getLastRefillTime()) / 1000.0;
-            double refillToken = elapsedTime * params.getRefillRate();
+        TokenBucketState current, next;
+        boolean allowed;
+        long remaining;
 
-            long currentToken = Math.min(params.getBucketCapacity(),
-                    params.getToken() + (long) refillToken);
+        // CAS loop: read → compute → write atomically; retry if another thread won the race
+        do {
+            current = ref.get();
+            long nowNanos = System.nanoTime();
+            long refilled = (long)((nowNanos - current.lastRefillNanos()) / 1_000_000_000.0 * policy.getRefillRate());
+            long newTokens = Math.min(policy.getBucketCapacity(), current.tokens() + refilled);
 
-            params.setLastRefillTime((long) currentTime);
+            allowed = newTokens >= 1;
+            remaining = allowed ? newTokens - 1 : 0;
+            next = new TokenBucketState(remaining, nowNanos);
+        } while (allowed && !ref.compareAndSet(current, next));
 
-            boolean allowed = false;
-            if (currentToken >= 1) {
-                currentToken -= 1;
-                params.setToken(currentToken);
-                allowed = true;
-            }
-
-            long retryAfterMs = allowed ? 0L : (long) (1000.0 / params.getRefillRate());
-            return RateLimiterDTO.builder()
-                    .allowed(allowed)
-                    .remainingToken(currentToken)
-                    .retryAfterMs(retryAfterMs)
-                    .resetAtEpochMs((long) currentTime + retryAfterMs)
-                    .reason(allowed ? "ok" : "bucket_empty")
-                    .build();
-        }
+        long retryAfterMs = allowed ? 0L : (long) (1000.0 / policy.getRefillRate());
+        return RateLimiterDTO.builder()
+                .allowed(allowed)
+                .remainingToken(remaining)
+                .retryAfterMs(retryAfterMs)
+                .resetAtEpochMs(System.currentTimeMillis() + retryAfterMs)
+                .reason(allowed ? "ok" : "bucket_empty")
+                .build();
     }
 }

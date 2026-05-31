@@ -14,6 +14,12 @@ public class RateLimiterDTO {
         this.remainingToken = builder.remainingToken;
         this.reason = builder.reason;
     }
+    public boolean isAllowed() { return allowed; }
+    public long getRemainingToken() { return remainingToken; }
+    public long getRetryAfterMs() { return retryAfterMs; }
+    public long getResetAtEpochMs() { return resetAtEpochMs; }
+    public String getReason() { return reason; }
+
     public static Builder builder() { return new Builder(); }
 
     public static class Builder {

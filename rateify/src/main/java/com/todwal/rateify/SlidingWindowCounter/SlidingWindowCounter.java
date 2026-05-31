@@ -19,26 +19,25 @@ public class SlidingWindowCounter implements RateLimiter {
     @Override
     public RateLimiterDTO tryAcquire(String key, RateLimiterPolicy policy) {
         SlidingWindowCounterParams params = windows.computeIfAbsent(key,
-                k -> new SlidingWindowCounterParams(policy.getLimit(), policy.getWindowSizeMs()));
+                k -> new SlidingWindowCounterParams(policy.getLimit(), policy.getWindowSizeMs() * 1_000_000L));
 
         synchronized (params) {
-            long now = System.currentTimeMillis();
+            long nowNanos = System.nanoTime();
 
-            // Advance the fixed window if time has moved forward
-            long elapsed = now - params.getWindowStart();
-            long windowsElapsed = elapsed / params.getWindowSizeMs();
+            // Advance the fixed window forward in time
+            long windowsElapsed = (nowNanos - params.getWindowStartNanos()) / params.getWindowSizeNs();
             if (windowsElapsed >= 1) {
-                // If 2+ full windows passed, previous data is entirely stale
+                // If 2+ full windows passed, all previous data is stale
                 params.setPrevCount(windowsElapsed >= 2 ? 0 : params.getCurrCount());
                 params.setCurrCount(0);
-                params.setWindowStart(params.getWindowStart() + windowsElapsed * params.getWindowSizeMs());
+                params.setWindowStartNanos(params.getWindowStartNanos() + windowsElapsed * params.getWindowSizeNs());
             }
 
-            long windowEnd = params.getWindowStart() + params.getWindowSizeMs();
+            long windowEndNanos = params.getWindowStartNanos() + params.getWindowSizeNs();
 
             // Weighted estimate: prevCount contributes proportionally to how much of the
-            // previous window overlaps the current sliding window
-            double overlap = (double) (windowEnd - now) / params.getWindowSizeMs();
+            // previous window overlaps the current sliding window position
+            double overlap = (double) (windowEndNanos - nowNanos) / params.getWindowSizeNs();
             double estimate = params.getPrevCount() * overlap + params.getCurrCount();
 
             boolean allowed = estimate < params.getLimit();
@@ -50,28 +49,29 @@ public class SlidingWindowCounter implements RateLimiter {
                         .allowed(true)
                         .remainingToken(remaining)
                         .retryAfterMs(0L)
-                        .resetAtEpochMs(windowEnd)
+                        .resetAtEpochMs(System.currentTimeMillis() + (windowEndNanos - nowNanos) / 1_000_000L)
                         .reason("ok")
                         .build();
             }
 
-            // Solve for when estimate drops below limit as time advances:
-            // prevCount * (windowEnd - t) / windowSizeMs + currCount < limit
-            // => t > windowEnd - windowSizeMs * (limit - currCount) / prevCount
-            long retryAfterMs;
+            // Solve for when the weighted estimate drops below limit as time advances:
+            // prevCount * (windowEnd - t) / windowSizeNs + currCount < limit
+            // => t > windowEnd - windowSizeNs * (limit - currCount) / prevCount
+            long retryAfterNs;
             if (params.getPrevCount() > 0) {
                 double requiredOverlap = (double) (params.getLimit() - params.getCurrCount()) / params.getPrevCount();
-                long targetTime = windowEnd - (long) (params.getWindowSizeMs() * requiredOverlap);
-                retryAfterMs = Math.max(1L, targetTime - now);
+                long targetNanos = windowEndNanos - (long) (params.getWindowSizeNs() * requiredOverlap);
+                retryAfterNs = Math.max(1_000_000L, targetNanos - nowNanos);
             } else {
-                retryAfterMs = windowEnd - now;
+                retryAfterNs = windowEndNanos - nowNanos;
             }
 
+            long retryAfterMs = retryAfterNs / 1_000_000L;
             return RateLimiterDTO.builder()
                     .allowed(false)
                     .remainingToken(0L)
                     .retryAfterMs(retryAfterMs)
-                    .resetAtEpochMs(now + retryAfterMs)
+                    .resetAtEpochMs(System.currentTimeMillis() + retryAfterMs)
                     .reason("window_full")
                     .build();
         }
